@@ -1,38 +1,292 @@
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
+.app-shell {
   min-height: 100vh;
+  color: #132536;
+  background:
+    radial-gradient(circle at top left, rgba(10, 132, 255, 0.14), transparent 26%),
+    radial-gradient(circle at top right, rgba(4, 120, 87, 0.16), transparent 24%),
+    linear-gradient(180deg, #eef6fb 0%, #f5f1e8 100%);
+}
+
+.hero,
+.workspace {
+  width: min(1360px, calc(100% - 32px));
+  margin: 0 auto;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 22px;
+  padding: 28px 0 20px;
+}
+
+.hero__copy,
+.hero__panel,
+.panel {
+  border: 1px solid rgba(19, 37, 54, 0.1);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 20px 45px rgba(19, 37, 54, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.hero__copy {
+  padding: 34px;
+}
+
+.hero__copy h1 {
+  margin: 14px 0;
+  font-size: clamp(2.6rem, 5vw, 4.7rem);
+  line-height: 0.96;
+  max-width: 12ch;
+}
+
+.hero__copy p,
+.hero__panel p,
+.section-heading p,
+.diagnostic-card p,
+.checkpoint p {
+  color: #546474;
+  line-height: 1.6;
+}
+
+.hero__note {
+  margin-top: 18px;
+  font-weight: 600;
+}
+
+.hero__panel {
+  padding: 28px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  justify-content: space-between;
 }
 
-.App-link {
-  color: #61dafb;
+.pill {
+  display: inline-flex;
+  padding: 8px 12px;
+  border-radius: 999px;
+  margin-right: 8px;
+  margin-bottom: 10px;
+  background: rgba(19, 37, 54, 0.07);
+  color: #132536;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
+.pill--accent {
+  background: rgba(5, 150, 105, 0.12);
+  color: #0f766e;
+}
+
+.workspace {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 36px;
+}
+
+.panel {
+  padding: 26px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.section-heading h2 {
+  margin: 8px 0 0;
+  font-size: 1.6rem;
+}
+
+.eyebrow {
+  display: inline-block;
+  color: #0b7285;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.grid-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grid-form--company {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.field input {
+  width: 100%;
+  border: 1px solid rgba(19, 37, 54, 0.14);
+  border-radius: 16px;
+  padding: 14px 15px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #132536;
+  font-size: 0.98rem;
+}
+
+.panel--summary {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(236, 247, 247, 0.86));
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.metric-card {
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(19, 37, 54, 0.08);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.metric-card p {
+  margin: 0 0 10px;
+  color: #607285;
+  font-size: 0.9rem;
+}
+
+.metric-card strong {
+  font-size: 1.15rem;
+}
+
+.metric-card--positive {
+  background: rgba(236, 253, 245, 0.9);
+}
+
+.metric-card--negative {
+  background: rgba(254, 242, 242, 0.92);
+}
+
+.data-layout {
+  display: grid;
+  grid-template-columns: 1.55fr 0.85fr;
+  gap: 20px;
+}
+
+.data-layout__forms {
+  display: grid;
+  gap: 20px;
+}
+
+.panel--sticky {
+  position: sticky;
+  top: 16px;
+  height: fit-content;
+}
+
+.diagnostic-list {
+  display: grid;
+  gap: 12px;
+}
+
+.diagnostic-card,
+.checkpoint,
+.table-card {
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.74);
+  border: 1px solid rgba(19, 37, 54, 0.08);
+}
+
+.diagnostic-card h3,
+.checkpoint h3,
+.table-card h3 {
+  margin: 0 0 10px;
+}
+
+.table-card__note {
+  margin: 14px 0 0;
+  color: #546474;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.table-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+td {
+  padding: 11px 0;
+  border-bottom: 1px solid rgba(19, 37, 54, 0.08);
+}
+
+td:last-child {
+  text-align: right;
+  font-weight: 700;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 1180px) {
+  .hero,
+  .data-layout,
+  .table-grid,
+  .metric-grid,
+  .grid-form--company {
+    grid-template-columns: 1fr;
   }
-  to {
-    transform: rotate(360deg);
+
+  .panel--sticky {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .workspace {
+    width: min(100% - 18px, 1360px);
+  }
+
+  .hero {
+    padding-top: 14px;
+  }
+
+  .hero__copy,
+  .hero__panel,
+  .panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .grid-form,
+  .section-heading {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+
+  .hero__copy h1 {
+    max-width: none;
+    font-size: 2.5rem;
   }
 }

@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders learn react link', () => {
+test("renders the finance analysis studio", () => {
   render(<App />);
-  const linkElement = screen.getByText(/learn react/i);
-  expect(linkElement).toBeInTheDocument();
+  expect(
+    screen.getByText(/studio professionnel d'analyse financiere/i)
+  ).toBeInTheDocument();
+  expect(screen.getByText(/tableau de flux/i)).toBeInTheDocument();
 });

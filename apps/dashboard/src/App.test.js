@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test("renders the finance analysis studio", () => {
+test("renders the mandate studio", () => {
   render(<App />);
   expect(
-    screen.getByText(/analyse financiere multi-exercices/i)
+    screen.getByText(/studio de traitement des mandats financiers/i)
   ).toBeInTheDocument();
-  expect(screen.getByText(/etats standardises/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/mandat 2 - projet usa/i).length).toBeGreaterThan(0);
 });

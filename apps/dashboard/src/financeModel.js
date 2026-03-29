@@ -1,6 +1,11 @@
+const DAYS_BASE = 365;
+
+export const MIN_YEARS = 2;
+export const MAX_YEARS = 5;
+
 export const defaultCompany = {
-  companyName: 'Optimus SA',
-  sector: 'Commerce et distribution',
+  companyName: 'Generation Holding SA',
+  sector: 'Dermatologie et produits generiques',
   fiscalYear: '2025',
   currency: 'CHF',
   accountingFramework: 'CO / Swiss GAAP RPC',
@@ -69,14 +74,15 @@ export const defaultHistoricalInputs = {
   },
 };
 
-const daysBase = 365;
-
 const ratio = (numerator, denominator) =>
   denominator === 0 ? 0 : numerator / denominator;
 
-const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
+const round = (value, digits = 2) => {
+  const factor = 10 ** digits;
+  return Math.round((Number(value) || 0) * factor) / factor;
+};
 
-const formatPercentValue = (value) => round(value * 100);
+const formatPercentValue = (value) => round(value * 100, 1);
 
 const getLiquidityComment = (currentRatio) => {
   if (currentRatio >= 1.5) {
@@ -117,6 +123,27 @@ const getCashFlowComment = (operatingCashFlow, freeCashFlow) => {
 
   return "Le cash-flow d'exploitation est insuffisant. Il faut analyser le resultat, le BFR et les charges non recurrentes.";
 };
+
+export const cloneYearInputs = (values = defaultInputs) =>
+  Object.fromEntries(
+    Object.keys(defaultInputs).map((key) => [key, Number(values[key]) || 0])
+  );
+
+export const buildVisibleYears = (latestYear, yearCount) =>
+  Array.from({ length: yearCount }, (_, index) => String(latestYear - index));
+
+export const ensureYearSet = (current, years) =>
+  years.reduce((accumulator, year, index) => {
+    const seededYear = defaultHistoricalInputs[year];
+    const fallbackYear = years[index + 1];
+    const fallbackSeed = fallbackYear ? current[fallbackYear] : defaultInputs;
+
+    accumulator[year] = cloneYearInputs(
+      current[year] || seededYear || fallbackSeed || defaultInputs
+    );
+
+    return accumulator;
+  }, {});
 
 export function analyzeFinancials(values) {
   const revenue = Number(values.revenue) || 0;
@@ -186,9 +213,9 @@ export function analyzeFinancials(values) {
   const quickRatio = ratio(receivables + cash, currentLiabilities);
   const equityRatio = ratio(equity, fixedAssets + currentAssets);
   const gearing = ratio(longTermDebt + shortTermFinancialDebt, equity);
-  const dso = ratio(receivables, revenue) * daysBase;
-  const dio = ratio(inventory, purchases) * daysBase;
-  const dpo = ratio(suppliers, purchases) * daysBase;
+  const dso = ratio(receivables, revenue) * DAYS_BASE;
+  const dio = ratio(inventory, purchases) * DAYS_BASE;
+  const dpo = ratio(suppliers, purchases) * DAYS_BASE;
 
   return {
     metrics: {
@@ -239,5 +266,265 @@ export function analyzeFinancials(values) {
         content: getCashFlowComment(round(operatingCashFlow), round(freeCashFlow)),
       },
     ],
+  };
+}
+
+const computeNpv = (discountRate, cashFlows) =>
+  cashFlows.reduce(
+    (total, cashFlow, index) => total + cashFlow / (1 + discountRate) ** (index + 1),
+    0
+  );
+
+const computeIrr = (cashFlows) => {
+  const hasPositive = cashFlows.some((value) => value > 0);
+  const hasNegative = cashFlows.some((value) => value < 0);
+
+  if (!hasPositive || !hasNegative) {
+    return null;
+  }
+
+  let lower = -0.95;
+  let upper = 2.5;
+
+  const npvAt = (rate) =>
+    cashFlows.reduce(
+      (total, cashFlow, index) => total + cashFlow / (1 + rate) ** (index + 1),
+      0
+    );
+
+  let lowerValue = npvAt(lower);
+  let upperValue = npvAt(upper);
+
+  if (lowerValue * upperValue > 0) {
+    return null;
+  }
+
+  for (let iteration = 0; iteration < 80; iteration += 1) {
+    const mid = (lower + upper) / 2;
+    const midValue = npvAt(mid);
+
+    if (Math.abs(midValue) < 0.0001) {
+      return mid;
+    }
+
+    if (lowerValue * midValue <= 0) {
+      upper = mid;
+      upperValue = midValue;
+    } else {
+      lower = mid;
+      lowerValue = midValue;
+    }
+  }
+
+  return (lower + upper) / 2;
+};
+
+const getRiskLevel = (score) => {
+  if (score >= 16) {
+    return 'critical';
+  }
+
+  if (score >= 10) {
+    return 'high';
+  }
+
+  if (score >= 6) {
+    return 'moderate';
+  }
+
+  return 'low';
+};
+
+export function analyzeMarketOpportunity(marketInputs, projectInputs, scenario) {
+  const totalMarketSize = Number(marketInputs.totalMarketSize) || 0;
+  const dermatologyShare = (Number(marketInputs.dermatologyShare) || 0) / 100;
+  const genericShare = (Number(marketInputs.genericShare) || 0) / 100;
+  const marketGrowthRate = (Number(marketInputs.marketGrowthRate) || 0) / 100;
+  const addressableShare = (Number(marketInputs.addressableShare) || 0) / 100;
+  const targetShare = (Number(marketInputs.targetShare) || 0) / 100;
+  const averagePrice = Number(marketInputs.averagePricePerTreatment) || 0;
+  const years = projectInputs.years;
+  const horizon = Math.max(years.length - 1, 0);
+  const revenueMultiplier = Number(scenario.revenueMultiplier) || 1;
+
+  const todayTam = totalMarketSize * dermatologyShare * genericShare;
+  const futureTam = todayTam * (1 + marketGrowthRate) ** horizon;
+  const sam = futureTam * addressableShare;
+  const som = sam * targetShare * revenueMultiplier;
+  const yearlyUnits = averagePrice === 0 ? 0 : som / averagePrice;
+
+  return {
+    tamToday: round(todayTam),
+    tamAtHorizon: round(futureTam),
+    sam: round(sam),
+    som: round(som),
+    yearlyUnits: round(yearlyUnits),
+    competitorCount: Number(marketInputs.competitorCount) || 0,
+    regulatoryLeadMonths: Number(marketInputs.regulatoryLeadMonths) || 0,
+  };
+}
+
+export function analyzeRiskRegister(riskRegister) {
+  const scoredRisks = riskRegister.map((item) => {
+    const probability = Number(item.probability) || 0;
+    const impact = Number(item.impact) || 0;
+    const score = probability * impact;
+
+    return {
+      ...item,
+      probability,
+      impact,
+      score,
+      level: getRiskLevel(score),
+    };
+  });
+
+  const totalScore = scoredRisks.reduce((sum, risk) => sum + risk.score, 0);
+  const averageScore = scoredRisks.length === 0 ? 0 : totalScore / scoredRisks.length;
+  const criticalCount = scoredRisks.filter((risk) => risk.level === 'critical').length;
+  const highCount = scoredRisks.filter((risk) => risk.level === 'high').length;
+
+  return {
+    scoredRisks,
+    totalScore: round(totalScore),
+    averageScore: round(averageScore),
+    criticalCount,
+    highCount,
+  };
+}
+
+export function analyzeProjectScenario(projectInputs, scenario) {
+  const discountRate = (Number(projectInputs.discountRate) || 0) / 100;
+  const taxRate = (Number(projectInputs.taxRate) || 0) / 100;
+  const workingCapitalRate =
+    ((Number(projectInputs.workingCapitalRate) || 0) / 100) *
+    (Number(scenario.workingCapitalMultiplier) || 1);
+
+  let previousWorkingCapital = Number(projectInputs.initialWorkingCapital) || 0;
+  let cumulativeCashFlow = 0;
+  let paybackYear = null;
+  let peakFundingNeed = 0;
+
+  const yearly = projectInputs.years.map((year) => {
+    const baseRevenue = Number(projectInputs.revenueByYear[year]) || 0;
+    const baseMargin = (Number(projectInputs.ebitdaMarginByYear[year]) || 0) / 100;
+    const capex = (Number(projectInputs.capexByYear[year]) || 0) *
+      (Number(scenario.capexMultiplier) || 1);
+    const depreciation = Number(projectInputs.depreciationByYear[year]) || 0;
+    const fixedCosts = (Number(projectInputs.fixedCostsByYear[year]) || 0) *
+      (Number(scenario.opexMultiplier) || 1);
+    const revenue = baseRevenue * (Number(scenario.revenueMultiplier) || 1);
+    const ebitda =
+      revenue * baseMargin * (Number(scenario.marginMultiplier) || 1) - fixedCosts;
+    const ebit = ebitda - depreciation;
+    const taxes = ebit > 0 ? ebit * taxRate : 0;
+    const operatingProfitAfterTax = ebit - taxes;
+    const workingCapital = revenue * workingCapitalRate;
+    const deltaWorkingCapital = workingCapital - previousWorkingCapital;
+    const freeCashFlow =
+      operatingProfitAfterTax + depreciation - capex - deltaWorkingCapital;
+
+    previousWorkingCapital = workingCapital;
+    cumulativeCashFlow += freeCashFlow;
+
+    if (paybackYear === null && cumulativeCashFlow >= 0) {
+      paybackYear = year;
+    }
+
+    peakFundingNeed = Math.min(peakFundingNeed, cumulativeCashFlow);
+
+    return {
+      year,
+      revenue: round(revenue),
+      ebitda: round(ebitda),
+      ebit: round(ebit),
+      capex: round(capex),
+      workingCapital: round(workingCapital),
+      deltaWorkingCapital: round(deltaWorkingCapital),
+      taxes: round(taxes),
+      freeCashFlow: round(freeCashFlow),
+      cumulativeCashFlow: round(cumulativeCashFlow),
+    };
+  });
+
+  const cashFlows = yearly.map((row) => row.freeCashFlow);
+  const npv = computeNpv(discountRate, cashFlows);
+  const irr = computeIrr(cashFlows);
+  const totalCapex = yearly.reduce((sum, row) => sum + row.capex, 0);
+  const totalRevenue = yearly.reduce((sum, row) => sum + row.revenue, 0);
+  const totalFreeCashFlow = yearly.reduce((sum, row) => sum + row.freeCashFlow, 0);
+  const profitabilityIndex = totalCapex === 0 ? 0 : npv / totalCapex;
+  const breakEvenYear =
+    yearly.find((row) => row.freeCashFlow > 0 && row.ebitda > 0)?.year || 'Non atteint';
+
+  return {
+    yearly,
+    headline: {
+      npv: round(npv),
+      irr: irr === null ? null : round(irr * 100, 1),
+      paybackYear: paybackYear || 'Hors horizon',
+      breakEvenYear,
+      peakFundingNeed: round(Math.abs(peakFundingNeed)),
+      totalCapex: round(totalCapex),
+      totalRevenue: round(totalRevenue),
+      totalFreeCashFlow: round(totalFreeCashFlow),
+      profitabilityIndex: round(profitabilityIndex, 2),
+    },
+  };
+}
+
+export function buildExecutiveMemo({
+  marketAnalysis,
+  baseScenario,
+  downsideScenario,
+  riskAnalysis,
+}) {
+  const signals = [];
+
+  if (baseScenario.headline.npv > 0) {
+    signals.push('Le scenario central cree de la valeur economique.');
+  } else {
+    signals.push("Le scenario central ne cree pas encore suffisamment de valeur.");
+  }
+
+  if (downsideScenario.headline.npv > 0) {
+    signals.push('La downside reste defendable sur l horizon analyse.');
+  } else {
+    signals.push('La downside detruit de la valeur et justifie des garde-fous de go/no-go.');
+  }
+
+  if (riskAnalysis.criticalCount > 0) {
+    signals.push('Au moins un risque critique doit etre mitige avant engagement ferme.');
+  } else if (riskAnalysis.highCount > 0) {
+    signals.push('Le profil de risque reste eleve mais pilotable avec un plan de mitigation.');
+  } else {
+    signals.push('Le portefeuille de risques reste sous controle.');
+  }
+
+  if (marketAnalysis.som >= baseScenario.headline.totalRevenue / 2) {
+    signals.push('La taille de marche accessible couvre convenablement les ambitions commerciales.');
+  } else {
+    signals.push('Les hypotheses commerciales paraissent exigeantes au regard du marche accessible.');
+  }
+
+  const go =
+    baseScenario.headline.npv > 0 &&
+    riskAnalysis.criticalCount === 0 &&
+    downsideScenario.headline.npv > -0.15 * Math.abs(baseScenario.headline.npv || 1);
+
+  return {
+    recommendation: go ? 'Go sous conditions' : 'Revoir avant go',
+    summary: signals,
+    conditions: go
+      ? [
+          'Valider les hypotheses d acces au marche americain et le calendrier reglementaire.',
+          'Encadrer le financement maximal via un seuil de peak funding.',
+          'Suivre mensuellement les indicateurs commerciaux et le delta de BFR.',
+        ]
+      : [
+          'Rebaser les hypotheses de revenus et de marge avant presentation au comite.',
+          'Renforcer la mitigation des risques reglementaires et supply chain.',
+          'Construire un plan de sortie si le break-even glisse au-dela de l horizon cible.',
+        ],
   };
 }

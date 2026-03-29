@@ -34,7 +34,7 @@ const statementSections = [
   },
   {
     title: 'Bilan et cycle',
-    subtitle: 'Structure, liquidite et donnees d'exploitation.',
+    subtitle: "Structure, liquidite et donnees d'exploitation.",
     fields: [
       { key: 'inventory', label: 'Stocks' },
       { key: 'receivables', label: 'Creances et comptes transitoires' },
@@ -174,34 +174,37 @@ function App() {
     [inputsByYear, years]
   );
 
-  const getYearInputs = (year) => inputsByYear[year] || defaultInputs;
   const latestAnalysis = analysesByYear[years[0]];
-  const latestInputs = getYearInputs(years[0]);
+  const latestInputs = inputsByYear[years[0]] || defaultInputs;
 
   const balanceRows = useMemo(
     () => [
       {
         label: 'Liquidites',
-        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).cash])),
+        values: Object.fromEntries(
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).cash])
+        ),
       },
       {
         label: 'Creances et comptes transitoires',
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).receivables])
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).receivables])
         ),
       },
       {
         label: 'Stocks',
-        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).inventory])),
+        values: Object.fromEntries(
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).inventory])
+        ),
       },
       {
         label: 'Total actifs circulants',
         values: Object.fromEntries(
           years.map((year) => [
             year,
-            getYearInputs(year).cash +
-              getYearInputs(year).receivables +
-              getYearInputs(year).inventory,
+            (inputsByYear[year] || defaultInputs).cash +
+              (inputsByYear[year] || defaultInputs).receivables +
+              (inputsByYear[year] || defaultInputs).inventory,
           ])
         ),
         emphasis: 'total',
@@ -209,7 +212,7 @@ function App() {
       {
         label: 'Immobilisations',
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).fixedAssets])
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).fixedAssets])
         ),
       },
       {
@@ -217,10 +220,10 @@ function App() {
         values: Object.fromEntries(
           years.map((year) => [
             year,
-            getYearInputs(year).cash +
-              getYearInputs(year).receivables +
-              getYearInputs(year).inventory +
-              getYearInputs(year).fixedAssets,
+            (inputsByYear[year] || defaultInputs).cash +
+              (inputsByYear[year] || defaultInputs).receivables +
+              (inputsByYear[year] || defaultInputs).inventory +
+              (inputsByYear[year] || defaultInputs).fixedAssets,
           ])
         ),
         emphasis: 'grand-total',
@@ -228,17 +231,25 @@ function App() {
       {
         label: 'Dettes financieres court terme',
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).shortTermFinancialDebt])
+          years.map((year) => [
+            year,
+            (inputsByYear[year] || defaultInputs).shortTermFinancialDebt,
+          ])
         ),
       },
       {
         label: 'Fournisseurs',
-        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).suppliers])),
+        values: Object.fromEntries(
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).suppliers])
+        ),
       },
       {
         label: "Autres dettes d'exploitation",
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).otherOperatingLiabilities])
+          years.map((year) => [
+            year,
+            (inputsByYear[year] || defaultInputs).otherOperatingLiabilities,
+          ])
         ),
       },
       {
@@ -246,9 +257,9 @@ function App() {
         values: Object.fromEntries(
           years.map((year) => [
             year,
-            getYearInputs(year).shortTermFinancialDebt +
-              getYearInputs(year).suppliers +
-              getYearInputs(year).otherOperatingLiabilities,
+            (inputsByYear[year] || defaultInputs).shortTermFinancialDebt +
+              (inputsByYear[year] || defaultInputs).suppliers +
+              (inputsByYear[year] || defaultInputs).otherOperatingLiabilities,
           ])
         ),
         emphasis: 'total',
@@ -256,23 +267,25 @@ function App() {
       {
         label: 'Dettes financieres long terme',
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).longTermDebt])
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).longTermDebt])
         ),
       },
       {
         label: 'Capitaux propres',
-        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).equity])),
+        values: Object.fromEntries(
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).equity])
+        ),
       },
       {
         label: 'Total du passif',
         values: Object.fromEntries(
           years.map((year) => [
             year,
-            getYearInputs(year).shortTermFinancialDebt +
-              getYearInputs(year).suppliers +
-              getYearInputs(year).otherOperatingLiabilities +
-              getYearInputs(year).longTermDebt +
-              getYearInputs(year).equity,
+            (inputsByYear[year] || defaultInputs).shortTermFinancialDebt +
+              (inputsByYear[year] || defaultInputs).suppliers +
+              (inputsByYear[year] || defaultInputs).otherOperatingLiabilities +
+              (inputsByYear[year] || defaultInputs).longTermDebt +
+              (inputsByYear[year] || defaultInputs).equity,
           ])
         ),
         emphasis: 'grand-total',
@@ -285,11 +298,15 @@ function App() {
     () => [
       {
         label: "Chiffre d'affaires",
-        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).revenue])),
+        values: Object.fromEntries(
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).revenue])
+        ),
       },
       {
         label: 'Achats / couts directs',
-        values: Object.fromEntries(years.map((year) => [year, -getYearInputs(year).purchases])),
+        values: Object.fromEntries(
+          years.map((year) => [year, -(inputsByYear[year] || defaultInputs).purchases])
+        ),
       },
       {
         label: 'Marge brute',
@@ -301,13 +318,19 @@ function App() {
       {
         label: 'Charges de personnel',
         values: Object.fromEntries(
-          years.map((year) => [year, -getYearInputs(year).personnelExpenses])
+          years.map((year) => [
+            year,
+            -(inputsByYear[year] || defaultInputs).personnelExpenses,
+          ])
         ),
       },
       {
         label: "Autres charges d'exploitation",
         values: Object.fromEntries(
-          years.map((year) => [year, -getYearInputs(year).otherOperatingExpenses])
+          years.map((year) => [
+            year,
+            -(inputsByYear[year] || defaultInputs).otherOperatingExpenses,
+          ])
         ),
       },
       {
@@ -320,7 +343,7 @@ function App() {
       {
         label: 'Amortissements',
         values: Object.fromEntries(
-          years.map((year) => [year, -getYearInputs(year).depreciation])
+          years.map((year) => [year, -(inputsByYear[year] || defaultInputs).depreciation])
         ),
       },
       {
@@ -332,13 +355,16 @@ function App() {
       {
         label: 'Elements non recurrents',
         values: Object.fromEntries(
-          years.map((year) => [year, -getYearInputs(year).nonRecurringItems])
+          years.map((year) => [
+            year,
+            -(inputsByYear[year] || defaultInputs).nonRecurringItems,
+          ])
         ),
       },
       {
         label: 'Resultat financier',
         values: Object.fromEntries(
-          years.map((year) => [year, getYearInputs(year).financialResult])
+          years.map((year) => [year, (inputsByYear[year] || defaultInputs).financialResult])
         ),
       },
       {
@@ -350,7 +376,7 @@ function App() {
       {
         label: 'Charge fiscale',
         values: Object.fromEntries(
-          years.map((year) => [year, -getYearInputs(year).taxExpense])
+          years.map((year) => [year, -(inputsByYear[year] || defaultInputs).taxExpense])
         ),
       },
       {
@@ -718,7 +744,7 @@ function App() {
                 {
                   label: "Chiffre d'affaires",
                   values: Object.fromEntries(
-                    years.map((year) => [year, getYearInputs(year).revenue])
+                    years.map((year) => [year, (inputsByYear[year] || defaultInputs).revenue])
                   ),
                 },
                 {

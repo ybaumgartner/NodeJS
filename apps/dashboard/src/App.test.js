@@ -4,7 +4,7 @@ import App from './App';
 test("renders the finance analysis studio", () => {
   render(<App />);
   expect(
-    screen.getByText(/studio professionnel d'analyse financiere/i)
+    screen.getByText(/analyse financiere multi-exercices/i)
   ).toBeInTheDocument();
-  expect(screen.getByText(/tableau de flux/i)).toBeInTheDocument();
+  expect(screen.getByText(/etats standardises/i)).toBeInTheDocument();
 });

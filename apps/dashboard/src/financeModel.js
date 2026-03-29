@@ -36,6 +36,39 @@ export const defaultInputs = {
   otherNonCashAdjustments: 0,
 };
 
+export const defaultHistoricalInputs = {
+  2025: { ...defaultInputs },
+  2024: {
+    revenue: 204,
+    purchases: 91,
+    personnelExpenses: 48,
+    otherOperatingExpenses: 25,
+    depreciation: 10,
+    financialResult: -1,
+    taxExpense: 0,
+    nonRecurringItems: 0,
+    inventory: 57,
+    receivables: 74,
+    cash: 7,
+    fixedAssets: 40,
+    equity: 103,
+    longTermDebt: 5,
+    shortTermFinancialDebt: 10,
+    suppliers: 39,
+    otherOperatingLiabilities: 21,
+    previousBfr: 40,
+    openingCash: 0,
+    capex: 0,
+    assetDisposals: 0,
+    newLongTermDebt: 0,
+    debtRepayment: 0,
+    capitalIncrease: 0,
+    dividends: 0,
+    latentReserves: 0,
+    otherNonCashAdjustments: 0,
+  },
+};
+
 const daysBase = 365;
 
 const ratio = (numerator, denominator) =>

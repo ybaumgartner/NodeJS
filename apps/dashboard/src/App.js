@@ -1,15 +1,18 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 import {
   analyzeFinancials,
   defaultCompany,
+  defaultHistoricalInputs,
   defaultInputs,
 } from './financeModel';
+
+const MIN_YEARS = 2;
+const MAX_YEARS = 5;
 
 const companyFields = [
   { key: 'companyName', label: 'Entreprise', type: 'text' },
   { key: 'sector', label: 'Secteur', type: 'text' },
-  { key: 'fiscalYear', label: 'Exercice', type: 'text' },
   { key: 'currency', label: 'Devise', type: 'text' },
   { key: 'accountingFramework', label: 'Referentiel', type: 'text' },
 ];
@@ -17,7 +20,7 @@ const companyFields = [
 const statementSections = [
   {
     title: 'Compte de resultat',
-    subtitle: 'Performance, CAF et lecture economique de la periode.',
+    subtitle: 'Performance economique de chaque exercice compare.',
     fields: [
       { key: 'revenue', label: "Chiffre d'affaires" },
       { key: 'purchases', label: 'Achats / couts directs' },
@@ -31,12 +34,12 @@ const statementSections = [
   },
   {
     title: 'Bilan et cycle',
-    subtitle: 'Structure des emplois et ressources et analyse du BFR.',
+    subtitle: 'Structure, liquidite et donnees d'exploitation.',
     fields: [
       { key: 'inventory', label: 'Stocks' },
-      { key: 'receivables', label: 'Creances clients' },
-      { key: 'cash', label: 'Tresorerie active' },
-      { key: 'fixedAssets', label: 'Actif immobilise' },
+      { key: 'receivables', label: 'Creances et comptes transitoires' },
+      { key: 'cash', label: 'Liquidites' },
+      { key: 'fixedAssets', label: 'Immobilisations' },
       { key: 'equity', label: 'Capitaux propres' },
       { key: 'longTermDebt', label: 'Dettes financieres long terme' },
       { key: 'shortTermFinancialDebt', label: 'Dettes financieres court terme' },
@@ -48,7 +51,7 @@ const statementSections = [
   },
   {
     title: 'Flux et retraitements',
-    subtitle: 'TFT/TFF, reserves latentes et pont de cash.',
+    subtitle: 'Investissements, financement et ajustements non cash.',
     fields: [
       { key: 'capex', label: 'Investissements (CAPEX)' },
       { key: 'assetDisposals', label: "Cessions d'actifs" },
@@ -61,6 +64,35 @@ const statementSections = [
     ],
   },
 ];
+
+const tabs = [
+  { id: 'input', label: 'Saisie comparee' },
+  { id: 'overview', label: 'Cockpit' },
+  { id: 'standardized', label: 'Etats standardises' },
+  { id: 'flows', label: 'Flux & ratios' },
+  { id: 'diagnostics', label: 'Diagnostic' },
+];
+
+const cloneYearInputs = (values = defaultInputs) =>
+  Object.fromEntries(
+    Object.keys(defaultInputs).map((key) => [key, Number(values[key]) || 0])
+  );
+
+const buildVisibleYears = (latestYear, yearCount) =>
+  Array.from({ length: yearCount }, (_, index) => String(latestYear - index));
+
+const ensureYearSet = (current, years) =>
+  years.reduce((accumulator, year, index) => {
+    const seededYear = defaultHistoricalInputs[year];
+    const fallbackYear = years[index + 1];
+    const fallbackSeed = fallbackYear ? current[fallbackYear] : defaultInputs;
+
+    accumulator[year] = cloneYearInputs(
+      current[year] || seededYear || fallbackSeed || defaultInputs
+    );
+
+    return accumulator;
+  }, {});
 
 const formatCurrency = (value, currency) =>
   new Intl.NumberFormat('fr-CH', {
@@ -82,53 +114,419 @@ function MetricCard({ label, value, tone = 'default' }) {
   );
 }
 
+function ComparativeTable({ title, years, rows, currency, note }) {
+  return (
+    <article className="table-card">
+      <h3>{title}</h3>
+      <div className="table-scroll">
+        <table className="comparison-table">
+          <thead>
+            <tr>
+              <th>Libelle</th>
+              {years.map((year) => (
+                <th key={year}>{year}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label} className={row.emphasis ? `row--${row.emphasis}` : ''}>
+                <td>{row.label}</td>
+                {years.map((year) => (
+                  <td key={`${row.label}-${year}`}>
+                    {formatCurrency(row.values[year] || 0, currency)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {note ? <p className="table-card__note">{note}</p> : null}
+    </article>
+  );
+}
+
 function App() {
   const [company, setCompany] = useState(defaultCompany);
-  const [inputs, setInputs] = useState(defaultInputs);
-  const analysis = useMemo(() => analyzeFinancials(inputs), [inputs]);
+  const [latestYear, setLatestYear] = useState(2025);
+  const [yearCount, setYearCount] = useState(2);
+  const [activeTab, setActiveTab] = useState('input');
+  const [inputsByYear, setInputsByYear] = useState(() =>
+    ensureYearSet(defaultHistoricalInputs, buildVisibleYears(2025, 2))
+  );
+
+  const years = useMemo(
+    () => buildVisibleYears(latestYear, yearCount),
+    [latestYear, yearCount]
+  );
+
+  useEffect(() => {
+    setInputsByYear((current) => ensureYearSet(current, years));
+  }, [years]);
+
+  const analysesByYear = useMemo(
+    () =>
+      years.reduce((accumulator, year) => {
+        accumulator[year] = analyzeFinancials(inputsByYear[year] || defaultInputs);
+        return accumulator;
+      }, {}),
+    [inputsByYear, years]
+  );
+
+  const getYearInputs = (year) => inputsByYear[year] || defaultInputs;
+  const latestAnalysis = analysesByYear[years[0]];
+  const latestInputs = getYearInputs(years[0]);
+
+  const balanceRows = useMemo(
+    () => [
+      {
+        label: 'Liquidites',
+        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).cash])),
+      },
+      {
+        label: 'Creances et comptes transitoires',
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).receivables])
+        ),
+      },
+      {
+        label: 'Stocks',
+        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).inventory])),
+      },
+      {
+        label: 'Total actifs circulants',
+        values: Object.fromEntries(
+          years.map((year) => [
+            year,
+            getYearInputs(year).cash +
+              getYearInputs(year).receivables +
+              getYearInputs(year).inventory,
+          ])
+        ),
+        emphasis: 'total',
+      },
+      {
+        label: 'Immobilisations',
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).fixedAssets])
+        ),
+      },
+      {
+        label: "Total de l'actif",
+        values: Object.fromEntries(
+          years.map((year) => [
+            year,
+            getYearInputs(year).cash +
+              getYearInputs(year).receivables +
+              getYearInputs(year).inventory +
+              getYearInputs(year).fixedAssets,
+          ])
+        ),
+        emphasis: 'grand-total',
+      },
+      {
+        label: 'Dettes financieres court terme',
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).shortTermFinancialDebt])
+        ),
+      },
+      {
+        label: 'Fournisseurs',
+        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).suppliers])),
+      },
+      {
+        label: "Autres dettes d'exploitation",
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).otherOperatingLiabilities])
+        ),
+      },
+      {
+        label: 'Total dettes court terme',
+        values: Object.fromEntries(
+          years.map((year) => [
+            year,
+            getYearInputs(year).shortTermFinancialDebt +
+              getYearInputs(year).suppliers +
+              getYearInputs(year).otherOperatingLiabilities,
+          ])
+        ),
+        emphasis: 'total',
+      },
+      {
+        label: 'Dettes financieres long terme',
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).longTermDebt])
+        ),
+      },
+      {
+        label: 'Capitaux propres',
+        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).equity])),
+      },
+      {
+        label: 'Total du passif',
+        values: Object.fromEntries(
+          years.map((year) => [
+            year,
+            getYearInputs(year).shortTermFinancialDebt +
+              getYearInputs(year).suppliers +
+              getYearInputs(year).otherOperatingLiabilities +
+              getYearInputs(year).longTermDebt +
+              getYearInputs(year).equity,
+          ])
+        ),
+        emphasis: 'grand-total',
+      },
+    ],
+    [inputsByYear, years]
+  );
+
+  const incomeStatementRows = useMemo(
+    () => [
+      {
+        label: "Chiffre d'affaires",
+        values: Object.fromEntries(years.map((year) => [year, getYearInputs(year).revenue])),
+      },
+      {
+        label: 'Achats / couts directs',
+        values: Object.fromEntries(years.map((year) => [year, -getYearInputs(year).purchases])),
+      },
+      {
+        label: 'Marge brute',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.grossMargin])
+        ),
+        emphasis: 'total',
+      },
+      {
+        label: 'Charges de personnel',
+        values: Object.fromEntries(
+          years.map((year) => [year, -getYearInputs(year).personnelExpenses])
+        ),
+      },
+      {
+        label: "Autres charges d'exploitation",
+        values: Object.fromEntries(
+          years.map((year) => [year, -getYearInputs(year).otherOperatingExpenses])
+        ),
+      },
+      {
+        label: 'EBITDA',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.ebitda])
+        ),
+        emphasis: 'total',
+      },
+      {
+        label: 'Amortissements',
+        values: Object.fromEntries(
+          years.map((year) => [year, -getYearInputs(year).depreciation])
+        ),
+      },
+      {
+        label: 'Resultat operationnel courant',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.ebit])
+        ),
+      },
+      {
+        label: 'Elements non recurrents',
+        values: Object.fromEntries(
+          years.map((year) => [year, -getYearInputs(year).nonRecurringItems])
+        ),
+      },
+      {
+        label: 'Resultat financier',
+        values: Object.fromEntries(
+          years.map((year) => [year, getYearInputs(year).financialResult])
+        ),
+      },
+      {
+        label: 'Resultat avant impots',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.profitBeforeTax])
+        ),
+      },
+      {
+        label: 'Charge fiscale',
+        values: Object.fromEntries(
+          years.map((year) => [year, -getYearInputs(year).taxExpense])
+        ),
+      },
+      {
+        label: "Benefice de l'exercice",
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.netIncome])
+        ),
+        emphasis: 'grand-total',
+      },
+    ],
+    [analysesByYear, inputsByYear, years]
+  );
+
+  const ratioRows = useMemo(
+    () => [
+      {
+        label: 'Taux de marge brute',
+        formatter: formatPercent,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.grossMarginRate])
+        ),
+      },
+      {
+        label: 'Marge EBITDA',
+        formatter: formatPercent,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.ebitdaMargin])
+        ),
+      },
+      {
+        label: 'Marge nette',
+        formatter: formatPercent,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.netMargin])
+        ),
+      },
+      {
+        label: 'Liquidite generale',
+        formatter: (value) => value.toFixed(2),
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.currentRatio])
+        ),
+      },
+      {
+        label: 'Liquidite reduite',
+        formatter: (value) => value.toFixed(2),
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.quickRatio])
+        ),
+      },
+      {
+        label: 'Autonomie financiere',
+        formatter: formatPercent,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.equityRatio])
+        ),
+      },
+      {
+        label: 'Gearing',
+        formatter: (value) => value.toFixed(2),
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.gearing])
+        ),
+      },
+      {
+        label: 'DSO',
+        formatter: formatDays,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.dso])
+        ),
+      },
+      {
+        label: 'DIO',
+        formatter: formatDays,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.dio])
+        ),
+      },
+      {
+        label: 'DPO',
+        formatter: formatDays,
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].ratios.dpo])
+        ),
+      },
+    ],
+    [analysesByYear, years]
+  );
+
+  const flowRows = useMemo(
+    () => [
+      {
+        label: "Cash-flow d'exploitation",
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.operatingCashFlow])
+        ),
+      },
+      {
+        label: "Flux d'investissement",
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.investingCashFlow])
+        ),
+      },
+      {
+        label: 'Flux de financement',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.financingCashFlow])
+        ),
+      },
+      {
+        label: 'Variation nette de tresorerie',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.netCashVariation])
+        ),
+        emphasis: 'total',
+      },
+      {
+        label: 'Free cash flow',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.freeCashFlow])
+        ),
+      },
+      {
+        label: 'Tresorerie de cloture projetee',
+        values: Object.fromEntries(
+          years.map((year) => [year, analysesByYear[year].metrics.projectedClosingCash])
+        ),
+        emphasis: 'grand-total',
+      },
+    ],
+    [analysesByYear, years]
+  );
 
   const handleCompanyChange = (key, value) => {
     setCompany((current) => ({ ...current, [key]: value }));
   };
 
-  const handleInputChange = (key, value) => {
+  const handleInputChange = (year, key, value) => {
     const numericValue = Number(value);
 
-    setInputs((current) => ({
+    setInputsByYear((current) => ({
       ...current,
-      [key]: Number.isNaN(numericValue) ? 0 : numericValue,
+      [year]: {
+        ...(current[year] || cloneYearInputs()),
+        [key]: Number.isNaN(numericValue) ? 0 : numericValue,
+      },
     }));
   };
-
-  const { metrics, ratios, diagnostics } = analysis;
 
   return (
     <div className="app-shell">
       <header className="hero">
         <div className="hero__copy">
           <span className="eyebrow">Finance d'entreprise</span>
-          <h1>Studio professionnel d'analyse financiere</h1>
+          <h1>Analyse financiere multi-exercices</h1>
           <p>
-            Saisissez les donnees cles d'une entreprise et obtenez un
-            diagnostic structure, liquidite, cash-flow et TFT aligne sur les
-            notions du cours: Bilan, CDR, FDR, BFR, BFRE, CAF, TFT/TFF et free
-            cash flow.
+            Saisissez les donnees cles sur au moins 2 ans et jusqu'a 5 ans pour
+            comparer la performance, la structure financiere et les flux de
+            tresorerie dans des vues distinctes.
           </p>
           <p className="hero__note">
-            Exemple precharge: compte 2025 d'Optimus SA. Tous les montants sont
-            saisis en kCHF et les valeurs d'ouverture reprennent 2024.
+            Les montants sont saisis en kCHF. L'onglet des etats standardises
+            reprend automatiquement les donnees dans une presentation de bilan
+            et compte de resultat adaptee au referentiel selectionne.
           </p>
         </div>
 
         <div className="hero__panel">
           <div>
-            <span className="pill">MVP exploitable</span>
-            <span className="pill pill--accent">CO / Swiss GAAP</span>
+            <span className="pill">Comparatif 2 a 5 ans</span>
+            <span className="pill pill--accent">{company.accountingFramework}</span>
           </div>
-          <h2>Diagnostic instantane</h2>
+          <h2>Lecture separee par onglets</h2>
           <p>
-            Le moteur recalcule chaque indicateur a la vollee et fournit des
-            commentaires de lecture pour faciliter l'analyse financiere.
+            La saisie, le cockpit, les etats standardises, les flux et le
+            diagnostic sont maintenant dissocies pour fluidifier la lecture.
           </p>
         </div>
       </header>
@@ -137,10 +535,10 @@ function App() {
         <section className="panel">
           <div className="section-heading">
             <div>
-              <span className="eyebrow">1. Referentiel</span>
-              <h2>Fiche entreprise</h2>
+              <span className="eyebrow">Parametrage</span>
+              <h2>Entreprise et horizon d'analyse</h2>
             </div>
-            <p>Montants d'exemple saisis en kCHF.</p>
+            <p>Choisissez l'exercice le plus recent et le nombre d'annees comparees.</p>
           </div>
 
           <div className="grid-form grid-form--company">
@@ -156,56 +554,54 @@ function App() {
                 />
               </label>
             ))}
+
+            <label className="field">
+              <span>Exercice le plus recent</span>
+              <input
+                type="number"
+                value={latestYear}
+                onChange={(event) => setLatestYear(Number(event.target.value) || 2025)}
+              />
+            </label>
+
+            <label className="field">
+              <span>Nombre d'annees</span>
+              <select
+                value={yearCount}
+                onChange={(event) =>
+                  setYearCount(
+                    Math.min(
+                      MAX_YEARS,
+                      Math.max(MIN_YEARS, Number(event.target.value) || MIN_YEARS)
+                    )
+                  )
+                }
+              >
+                {[2, 3, 4, 5].map((count) => (
+                  <option key={count} value={count}>
+                    {count} ans
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
 
-        <section className="panel panel--summary">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">2. Cockpit</span>
-              <h2>Synthese executif</h2>
-            </div>
-            <p>
-              {company.companyName} - {company.fiscalYear} - {company.sector}
-            </p>
-          </div>
+        <nav className="tabs" aria-label="Analyses financieres">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              className={`tab-button ${activeTab === tab.id ? 'tab-button--active' : ''}`}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
 
-          <div className="metric-grid">
-            <MetricCard
-              label="Resultat net"
-              value={formatCurrency(metrics.netIncome, company.currency)}
-              tone={metrics.netIncome >= 0 ? 'positive' : 'negative'}
-            />
-            <MetricCard
-              label="CAF"
-              value={formatCurrency(metrics.caf, company.currency)}
-              tone={metrics.caf >= 0 ? 'positive' : 'negative'}
-            />
-            <MetricCard
-              label="FDR"
-              value={formatCurrency(metrics.fdr, company.currency)}
-              tone={metrics.fdr >= 0 ? 'positive' : 'negative'}
-            />
-            <MetricCard
-              label="BFR"
-              value={formatCurrency(metrics.bfr, company.currency)}
-              tone={metrics.bfr <= metrics.fdr ? 'positive' : 'negative'}
-            />
-            <MetricCard
-              label="Tresorerie structurelle"
-              value={formatCurrency(metrics.structuralTreasury, company.currency)}
-              tone={metrics.structuralTreasury >= 0 ? 'positive' : 'negative'}
-            />
-            <MetricCard
-              label="Free cash flow"
-              value={formatCurrency(metrics.freeCashFlow, company.currency)}
-              tone={metrics.freeCashFlow >= 0 ? 'positive' : 'negative'}
-            />
-          </div>
-        </section>
-
-        <section className="data-layout">
-          <div className="data-layout__forms">
+        {activeTab === 'input' ? (
+          <section className="tab-panel">
             {statementSections.map((section) => (
               <section key={section.title} className="panel">
                 <div className="section-heading">
@@ -216,247 +612,296 @@ function App() {
                   <p>{section.subtitle}</p>
                 </div>
 
-                <div className="grid-form">
-                  {section.fields.map((field) => (
-                    <label key={field.key} className="field">
-                      <span>{field.label}</span>
-                      <input
-                        type="number"
-                        value={inputs[field.key]}
-                        onChange={(event) =>
-                          handleInputChange(field.key, event.target.value)
-                        }
-                      />
-                    </label>
-                  ))}
+                <div className="table-scroll">
+                  <table className="input-table">
+                    <thead>
+                      <tr>
+                        <th>Libelle</th>
+                        {years.map((year) => (
+                          <th key={year}>{year}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {section.fields.map((field) => (
+                        <tr key={field.key}>
+                          <td>{field.label}</td>
+                          {years.map((year) => (
+                            <td key={`${field.key}-${year}`}>
+                              <input
+                                type="number"
+                                value={inputsByYear[year]?.[field.key] ?? 0}
+                                onChange={(event) =>
+                                  handleInputChange(year, field.key, event.target.value)
+                                }
+                              />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             ))}
-          </div>
+          </section>
+        ) : null}
 
-          <aside className="panel panel--sticky">
-            <div className="section-heading">
-              <div>
-                <span className="eyebrow">3. Lecture</span>
-                <h2>Commentaires de diagnostic</h2>
+        {activeTab === 'overview' ? (
+          <section className="tab-panel tab-panel--stack">
+            <section className="panel panel--summary">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Cockpit</span>
+                  <h2>Synthese de {years[0]}</h2>
+                </div>
+                <p>
+                  {company.companyName} - {company.sector} - {company.accountingFramework}
+                </p>
               </div>
-            </div>
 
-            <div className="diagnostic-list">
-              {diagnostics.map((item) => (
-                <article key={item.title} className="diagnostic-card">
-                  <h3>{item.title}</h3>
-                  <p>{item.content}</p>
-                </article>
-              ))}
-            </div>
+              <div className="metric-grid">
+                <MetricCard
+                  label="Resultat net"
+                  value={formatCurrency(latestAnalysis.metrics.netIncome, company.currency)}
+                  tone={latestAnalysis.metrics.netIncome >= 0 ? 'positive' : 'negative'}
+                />
+                <MetricCard
+                  label="CAF"
+                  value={formatCurrency(latestAnalysis.metrics.caf, company.currency)}
+                  tone={latestAnalysis.metrics.caf >= 0 ? 'positive' : 'negative'}
+                />
+                <MetricCard
+                  label="FDR"
+                  value={formatCurrency(latestAnalysis.metrics.fdr, company.currency)}
+                  tone={latestAnalysis.metrics.fdr >= 0 ? 'positive' : 'negative'}
+                />
+                <MetricCard
+                  label="BFR"
+                  value={formatCurrency(latestAnalysis.metrics.bfr, company.currency)}
+                  tone={
+                    latestAnalysis.metrics.bfr <= latestAnalysis.metrics.fdr
+                      ? 'positive'
+                      : 'negative'
+                  }
+                />
+                <MetricCard
+                  label="Tresorerie structurelle"
+                  value={formatCurrency(
+                    latestAnalysis.metrics.structuralTreasury,
+                    company.currency
+                  )}
+                  tone={
+                    latestAnalysis.metrics.structuralTreasury >= 0
+                      ? 'positive'
+                      : 'negative'
+                  }
+                />
+                <MetricCard
+                  label="Free cash flow"
+                  value={formatCurrency(
+                    latestAnalysis.metrics.freeCashFlow,
+                    company.currency
+                  )}
+                  tone={
+                    latestAnalysis.metrics.freeCashFlow >= 0 ? 'positive' : 'negative'
+                  }
+                />
+              </div>
+            </section>
 
-            <div className="checkpoint">
-              <h3>Controle de coherence</h3>
-              <p>
-                Ecart entre tresorerie structurelle et tresorerie nette:
-                <strong>
-                  {' '}
-                  {formatCurrency(metrics.reconciliationGap, company.currency)}
-                </strong>
-              </p>
-              <p>
-                Tresorerie de cloture projetee par le TFT:
-                <strong>
-                  {' '}
-                  {formatCurrency(metrics.projectedClosingCash, company.currency)}
-                </strong>
-              </p>
-            </div>
-          </aside>
-        </section>
+            <ComparativeTable
+              title="Principaux indicateurs compares"
+              years={years}
+              currency={company.currency}
+              rows={[
+                {
+                  label: "Chiffre d'affaires",
+                  values: Object.fromEntries(
+                    years.map((year) => [year, getYearInputs(year).revenue])
+                  ),
+                },
+                {
+                  label: 'EBITDA',
+                  values: Object.fromEntries(
+                    years.map((year) => [year, analysesByYear[year].metrics.ebitda])
+                  ),
+                },
+                {
+                  label: 'Resultat net',
+                  values: Object.fromEntries(
+                    years.map((year) => [year, analysesByYear[year].metrics.netIncome])
+                  ),
+                  emphasis: 'total',
+                },
+                {
+                  label: 'BFR',
+                  values: Object.fromEntries(
+                    years.map((year) => [year, analysesByYear[year].metrics.bfr])
+                  ),
+                },
+                {
+                  label: 'FDR',
+                  values: Object.fromEntries(
+                    years.map((year) => [year, analysesByYear[year].metrics.fdr])
+                  ),
+                },
+                {
+                  label: 'Tresorerie nette',
+                  values: Object.fromEntries(
+                    years.map((year) => [year, analysesByYear[year].metrics.netCash])
+                  ),
+                },
+              ]}
+            />
+          </section>
+        ) : null}
 
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">4. Etats de synthese</span>
-              <h2>Compte de resultat et structure financiere</h2>
-            </div>
-          </div>
+        {activeTab === 'standardized' ? (
+          <section className="tab-panel tab-panel--stack">
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Presentation normalisee</span>
+                  <h2>Bilan standardise selon {company.accountingFramework}</h2>
+                </div>
+                <p>
+                  Restitution comparative des informations renseignees pour {years.length}{' '}
+                  exercices.
+                </p>
+              </div>
 
-          <div className="table-grid">
-            <article className="table-card">
-              <h3>Compte de resultat analytique</h3>
-              <table>
-                <tbody>
-                  <tr>
-                    <td>Chiffre d'affaires</td>
-                    <td>{formatCurrency(inputs.revenue, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>Marge brute</td>
-                    <td>{formatCurrency(metrics.grossMargin, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>EBITDA</td>
-                    <td>{formatCurrency(metrics.ebitda, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>EBIT</td>
-                    <td>{formatCurrency(metrics.ebit, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>Resultat operationnel recurrent</td>
-                    <td>
-                      {formatCurrency(
-                        metrics.recurringOperatingProfit,
-                        company.currency
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Resultat avant impots</td>
-                    <td>
-                      {formatCurrency(metrics.profitBeforeTax, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Resultat net</td>
-                    <td>{formatCurrency(metrics.netIncome, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>CAF</td>
-                    <td>{formatCurrency(metrics.caf, company.currency)}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p className="table-card__note">
-                Reprise de l'exemple fourni: les provisions 2025 sont
-                injectees dans le champ "Elements non recurrents" pour
-                retrouver un resultat net de 14 kCHF.
-              </p>
-            </article>
+              <ComparativeTable
+                title="Bilan apres retraitements"
+                years={years}
+                rows={balanceRows}
+                currency={company.currency}
+                note="Le format ventile les actifs circulants, les immobilisations, les dettes a court et long terme ainsi que les capitaux propres en reprenant le referentiel renseigne."
+              />
+            </section>
 
-            <article className="table-card">
-              <h3>Equilibre financier</h3>
-              <table>
-                <tbody>
-                  <tr>
-                    <td>FDR</td>
-                    <td>{formatCurrency(metrics.fdr, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>BFRE</td>
-                    <td>{formatCurrency(metrics.bfRe, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>BFR</td>
-                    <td>{formatCurrency(metrics.bfr, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>Variation de BFR</td>
-                    <td>{formatCurrency(metrics.deltaBfr, company.currency)}</td>
-                  </tr>
-                  <tr>
-                    <td>Tresorerie structurelle</td>
-                    <td>
-                      {formatCurrency(metrics.structuralTreasury, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Tresorerie nette</td>
-                    <td>{formatCurrency(metrics.netCash, company.currency)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </article>
-          </div>
-        </section>
+            <ComparativeTable
+              title="Compte de resultat standardise"
+              years={years}
+              rows={incomeStatementRows}
+              currency={company.currency}
+            />
+          </section>
+        ) : null}
 
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <span className="eyebrow">5. Tableau de flux</span>
-              <h2>TFT / TFF et free cash flow</h2>
-            </div>
-          </div>
-
-          <div className="table-grid">
-            <article className="table-card">
-              <h3>Flux de tresorerie</h3>
-              <table>
-                <tbody>
-                  <tr>
-                    <td>Cash-flow d'exploitation</td>
-                    <td>
-                      {formatCurrency(metrics.operatingCashFlow, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Flux d'investissement</td>
-                    <td>
-                      {formatCurrency(metrics.investingCashFlow, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Flux de financement</td>
-                    <td>
-                      {formatCurrency(metrics.financingCashFlow, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Variation nette de tresorerie</td>
-                    <td>
-                      {formatCurrency(metrics.netCashVariation, company.currency)}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Free cash flow</td>
-                    <td>{formatCurrency(metrics.freeCashFlow, company.currency)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </article>
+        {activeTab === 'flows' ? (
+          <section className="tab-panel tab-panel--split">
+            <ComparativeTable
+              title="Tableau de flux compare"
+              years={years}
+              rows={flowRows}
+              currency={company.currency}
+            />
 
             <article className="table-card">
               <h3>Ratios d'analyse</h3>
-              <table>
-                <tbody>
-                  <tr>
-                    <td>Taux de marge brute</td>
-                    <td>{formatPercent(ratios.grossMarginRate)}</td>
-                  </tr>
-                  <tr>
-                    <td>Marge EBITDA</td>
-                    <td>{formatPercent(ratios.ebitdaMargin)}</td>
-                  </tr>
-                  <tr>
-                    <td>Marge nette</td>
-                    <td>{formatPercent(ratios.netMargin)}</td>
-                  </tr>
-                  <tr>
-                    <td>Liquidite generale</td>
-                    <td>{ratios.currentRatio.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td>Liquidite reduite</td>
-                    <td>{ratios.quickRatio.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td>Autonomie financiere</td>
-                    <td>{formatPercent(ratios.equityRatio)}</td>
-                  </tr>
-                  <tr>
-                    <td>Gearing</td>
-                    <td>{ratios.gearing.toFixed(2)}</td>
-                  </tr>
-                  <tr>
-                    <td>DSO / DIO / DPO</td>
-                    <td>
-                      {formatDays(ratios.dso)} / {formatDays(ratios.dio)} /{' '}
-                      {formatDays(ratios.dpo)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+              <div className="table-scroll">
+                <table className="comparison-table">
+                  <thead>
+                    <tr>
+                      <th>Ratio</th>
+                      {years.map((year) => (
+                        <th key={year}>{year}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ratioRows.map((row) => (
+                      <tr key={row.label}>
+                        <td>{row.label}</td>
+                        {years.map((year) => (
+                          <td key={`${row.label}-${year}`}>
+                            {row.formatter(row.values[year] || 0)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </article>
-          </div>
-        </section>
+          </section>
+        ) : null}
+
+        {activeTab === 'diagnostics' ? (
+          <section className="tab-panel tab-panel--split">
+            <section className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Diagnostic</span>
+                  <h2>Commentaires par exercice</h2>
+                </div>
+              </div>
+
+              <div className="year-diagnostics">
+                {years.map((year) => (
+                  <article key={year} className="diagnostic-year">
+                    <div className="diagnostic-year__header">
+                      <h3>{year}</h3>
+                      <span className="pill pill--soft">
+                        {formatCurrency(
+                          analysesByYear[year].metrics.netIncome,
+                          company.currency
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="diagnostic-list">
+                      {analysesByYear[year].diagnostics.map((item) => (
+                        <article key={`${year}-${item.title}`} className="diagnostic-card">
+                          <h4>{item.title}</h4>
+                          <p>{item.content}</p>
+                        </article>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+
+            <aside className="panel">
+              <div className="section-heading">
+                <div>
+                  <span className="eyebrow">Controle</span>
+                  <h2>Coherence {years[0]}</h2>
+                </div>
+              </div>
+
+              <div className="checkpoint">
+                <h3>Reconciliation de tresorerie</h3>
+                <p>
+                  Ecart entre tresorerie structurelle et tresorerie nette:
+                  <strong>
+                    {' '}
+                    {formatCurrency(
+                      latestAnalysis.metrics.reconciliationGap,
+                      company.currency
+                    )}
+                  </strong>
+                </p>
+                <p>
+                  Tresorerie de cloture projetee par le TFT:
+                  <strong>
+                    {' '}
+                    {formatCurrency(
+                      latestAnalysis.metrics.projectedClosingCash,
+                      company.currency
+                    )}
+                  </strong>
+                </p>
+                <p>
+                  Tresorerie de bilan:
+                  <strong> {formatCurrency(latestInputs.cash, company.currency)}</strong>
+                </p>
+              </div>
+            </aside>
+          </section>
+        ) : null}
       </main>
     </div>
   );
